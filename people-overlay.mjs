@@ -1,6 +1,6 @@
-import {ageStage,yearLocations,resolveSelection,groupMapLocations,clusterMapGroups,planPeopleGroup,project,inBaseMap,westernPoint,canLocateInWest,lifeStatus} from './people-data.mjs?v=80e2212c3950c3db';
-import {selectLocationWorks} from './people-works.mjs?v=80e2212c3950c3db';
-import {biographyResearchHTML,workResearchHTML} from './people-research.mjs?v=80e2212c3950c3db';
+import {ageStage,yearLocations,resolveSelection,groupMapLocations,clusterMapGroups,planPeopleGroup,project,inBaseMap,westernPoint,canLocateInWest,lifeStatus} from './people-data.mjs?v=dc09b41dfe159b9a';
+import {selectLocationWorks} from './people-works.mjs?v=dc09b41dfe159b9a';
+import {biographyResearchHTML,workResearchHTML} from './people-research.mjs?v=dc09b41dfe159b9a';
 
 const stage=document.getElementById('stage'),world=document.getElementById('world-map');
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

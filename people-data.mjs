@@ -8,6 +8,7 @@ export function ageStage(person,year){
 export function lifeStatus(person,year){
  const age=ageStage(person,year).label;
  if(Number.isInteger(person.birth_year)&&year<person.birth_year)return {key:'unborn',status:person.birth_uncertain?'尚未出生（依采用生年）':'尚未出生',ageLabel:'—'};
+ if(!Number.isInteger(person.birth_year)&&Number.isInteger(person.record_from)&&year<person.record_from)return {key:'uncertain',status:'生存状态待考',ageLabel:'年龄待考'};
  if(Number.isInteger(person.death_year)){
   if(year>person.death_year)return {key:'dead',status:'已故',ageLabel:Number.isInteger(person.birth_year)?`享年约${person.death_year-person.birth_year}岁`:'享年待考'};
   if(year===person.death_year)return {key:'dying',status:'本年去世',ageLabel:age};
