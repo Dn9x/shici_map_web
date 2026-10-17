@@ -1,15 +1,16 @@
-import {ageStage,yearLocations,resolveSelection,project,inBaseMap,westernPoint,canLocateInWest,lifeStatus} from './people-data.mjs?v=559b2b2851e4dd46';
-import {selectLocationWorks} from './people-works.mjs?v=559b2b2851e4dd46';
-import {biographyResearchHTML,workResearchHTML} from './people-research.mjs?v=559b2b2851e4dd46';
+import {ageStage,yearLocations,resolveSelection,groupMapLocations,clusterMapGroups,planPeopleGroup,project,inBaseMap,westernPoint,canLocateInWest,lifeStatus} from './people-data.mjs?v=80e2212c3950c3db';
+import {selectLocationWorks} from './people-works.mjs?v=80e2212c3950c3db';
+import {biographyResearchHTML,workResearchHTML} from './people-research.mjs?v=80e2212c3950c3db';
 
 const stage=document.getElementById('stage'),world=document.getElementById('world-map');
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const dataVersion=new URL(import.meta.url).searchParams.get('v');
 const get=async url=>{const address=new URL(url,document.baseURI);if(dataVersion)address.searchParams.set('v',dataVersion);const r=await fetch(address);if(!r.ok)throw Error(`资料读取失败 (${r.status})`);return r.json()};
-let people=[],events=new Map(),poetry=new Map(),research=new Map(),workScope='location',year=Number(world.dataset.year)||618,manifest,yearIndex={},selected=null,show=true,westDismissed=false,raf=0,animateMove=false;
+let people=[],events=new Map(),poetry=new Map(),research=new Map(),workScope='location',year=Number(world.dataset.year)||618,manifest,yearIndex={},selected=null,show=true,westDismissed=false,raf=0,animateMove=false,search='',activeOnly=false;
 const eventLookup=new Map(),locationCache=new Map();
 const focused=new Map(),nodes=new Map();
 const layer=document.createElement('div');layer.id='people-layer';stage.append(layer);
+const leaders=document.createElementNS('http://www.w3.org/2000/svg','svg');leaders.classList.add('poet-leaders');leaders.setAttribute('aria-hidden','true');layer.append(leaders);
 const extraDots=document.createElement('div');layer.append(extraDots);
 const roster=document.createElement('aside');roster.id='people-roster';roster.setAttribute('aria-label','人物列表');
 roster.innerHTML='<p class="people-caption">正在读取人物行迹…</p>';document.body.append(roster);
@@ -18,6 +19,21 @@ const west=document.createElement('aside');west.className='people-west';west.hid
 west.innerHTML=`<div class="people-west-head"><b>西域行迹</b><button aria-label="收起西域附图">×</button></div><p>主图范围以外 · 仅为行迹位置示意</p><div class="people-west-map"><svg viewBox="0 0 280 170" aria-hidden="true"><rect width="280" height="170" fill="#eee3c9"/><path d="M12 58Q70 10 112 46T230 40L270 15M18 110Q85 80 138 115T272 95" fill="none" stroke="#9eac8a" stroke-width="15" opacity=".38"/><path d="M12 62Q71 15 112 49T230 43L270 18M18 113Q85 84 138 118T272 99" fill="none" stroke="#71876b" stroke-width="1" opacity=".55"/><path d="M48 105Q105 87 139 95T221 117" fill="none" stroke="#72998a" stroke-width="1.5"/><g fill="#887352" font-family="Songti SC,serif" font-size="11"><text x="126" y="35">天 山</text><text x="62" y="121">龟兹</text><text x="149" y="74">北庭</text><text x="231" y="137">敦煌</text></g></svg></div>`;
 west.querySelector('button').onclick=()=>{westDismissed=true;renderPositions()};
 const cityNote=document.createElement('div');cityNote.className='people-city-note';cityNote.hidden=true;stage.append(cityNote);
+const mapGroups=new Map();
+const groupMenu=document.createElement('aside');groupMenu.className='people-group-menu';groupMenu.hidden=true;groupMenu.setAttribute('role','dialog');groupMenu.setAttribute('aria-label','人物群列表');document.body.append(groupMenu);
+
+function closeGroupMenu(){groupMenu.hidden=true;for(const b of nodes.values())if(b.dataset.presentation==='stack')b.setAttribute('aria-expanded','false')}
+function openGroupMenu(key,button){
+ const group=mapGroups.get(key);if(!group)return;
+ groupMenu.innerHTML=`<div class="people-group-heading"><b>${group.nearby?'附近':'此地'}人物 · ${group.members.length} 人</b><button type="button" aria-label="收起同地人物">×</button></div><p class="people-caption">${group.nearby?'各人地点分别列出，选择人物查看其落点。':'同年同定位点，不代表实际相遇。'}</p><div class="people-group-list">${group.members.map(({person:p,location:l})=>`<button type="button" data-group-person="${p.id}" aria-label="查看${esc(p.name)}的行迹与作品"><span class="people-group-portrait">${sprite(p,.65)}</span><span><b style="color:${p.color}">${esc(p.name)}</b><small>${esc(ageStage(p,year).label)} · ${esc(l.label)}</small></span></button>`).join('')}</div>`;
+ groupMenu.querySelector('[aria-label="收起同地人物"]').onclick=closeGroupMenu;
+ for(const item of groupMenu.querySelectorAll('[data-group-person]'))item.onclick=()=>{closeGroupMenu();openPanel(item.dataset.groupPerson)};
+ groupMenu.hidden=false;
+ button.setAttribute('aria-expanded','true');
+ const anchor=button.getBoundingClientRect(),box=groupMenu.getBoundingClientRect();
+ groupMenu.style.left=`${Math.max(8,Math.min(anchor.right+8,window.innerWidth-box.width-8))}px`;
+ groupMenu.style.top=`${Math.max(70,Math.min(anchor.top,stage.getBoundingClientRect().bottom-box.height-8))}px`;
+}
 
 function currentLocations(p){
  const key=`${p.id}:${year}`;if(!locationCache.has(key)){
@@ -32,29 +48,42 @@ function sprite(p,scale=1){
  // Viewport clipping is applied at display time. Original PNG pixels stay intact.
  return `<svg class="poet-figure" width="${f.display_width*scale}" height="${f.display_height*scale}" viewBox="${f.x} ${f.y} ${f.width} ${f.height}" aria-hidden="true"><image href="${esc(p.sheet_url)}" x="0" y="0" width="1536" height="1024"/></svg>`;
 }
-function marker(p,loc,inset=false){
+function marker(p,loc,inset=false,visual={}){
  let b=inset?null:nodes.get(p.id);
  if(!b){
   b=document.createElement('button');b.type='button';b.className='poet-marker';b.dataset.personId=p.id;
   b.addEventListener('pointerdown',e=>e.stopPropagation());
-  b.addEventListener('click',e=>{e.stopPropagation();stop();openPanel(p.id)});
+  b.addEventListener('click',e=>{e.stopPropagation();stop();if(b.dataset.presentation==='stack')openGroupMenu(b.dataset.groupKey,b);else openPanel(p.id)});
   if(!inset){nodes.set(p.id,b);layer.append(b)}
  }
- const age=ageStage(p,year),signature=`${age.stage}:${year}:${loc.id}`;
- if(b.dataset.signature!==signature){b.innerHTML=`<span class="poet-name" style="color:${p.color}">${esc(p.name)}</span>${sprite(p,inset?.65:1)}`;b.dataset.signature=signature}
+ const age=ageStage(p,year),mode=visual.mode||'single',companions=visual.companions||[];
+ const scale=inset?.65:Math.max(visual.scale||1,30/p.frames[age.stage].display_height);
+ const caption=mode==='stack'?`${p.name} 等`:p.name;
+ const signature=`${age.stage}:${year}:${loc.id}:${mode}:${scale}:${companions.map(c=>c.id).join(',')}`;
+ if(b.dataset.signature!==signature){
+  const figure=mode==='stack'?`<span class="poet-ensemble">${companions.map((c,i)=>`<span class="poet-companion poet-companion-${i}" aria-hidden="true">${sprite(c,.62)}</span>`).join('')}<span class="poet-front">${sprite(p,scale)}</span></span><span class="poet-expand-hint" aria-hidden="true">展开人物</span>`:sprite(p,scale);
+  b.innerHTML=`<span class="poet-name" style="color:${p.color}">${esc(caption)}</span>${figure}`;b.dataset.signature=signature;
+ }
+ b.dataset.presentation=mode;
+ b.classList.toggle('is-compact',mode==='compact');b.classList.toggle('is-pair',mode==='pair');b.classList.toggle('is-stack',mode==='stack');
+ b.classList.toggle('is-picked',selected===p.id&&!panel.hidden);b.classList.toggle('is-muted',!!visual.muted);
  b.setAttribute('aria-label',`${p.name}，${year}年，${age.label}，${loc.label}，查看行迹与作品`);
- b.setAttribute('aria-expanded',String(selected===p.id&&!panel.hidden));
+ if(mode==='stack'){b.setAttribute('aria-haspopup','dialog');b.setAttribute('aria-expanded','false')}
+ else{b.removeAttribute('aria-haspopup');b.setAttribute('aria-expanded',String(selected===p.id&&!panel.hidden))}
  b.title=`${p.name} · ${age.label}\n${loc.label}${currentLocations(p).length>1?'\n本年记录地点之一，先后未定':''}`;
  return b;
 }
 function renderPositions(){
  if(!manifest)return;
+ closeGroupMenu();mapGroups.clear();
  const cityMode=document.body.classList.contains('city-mode'),bounds=stage.getBoundingClientRect(),matrix=world.getScreenCTM();
  layer.hidden=!show||cityMode;
  const westMap=west.querySelector('.people-west-map');westMap.querySelectorAll('.poet-marker,.poet-record-dot').forEach(n=>n.remove());
  let western=0;
  extraDots.replaceChildren();
- const occupied=[];
+ leaders.replaceChildren();leaders.setAttribute('viewBox',`0 0 ${bounds.width} ${bounds.height}`);
+ const mainEntries=[];
+ for(const node of nodes.values())node.hidden=true;
  for(const p of people){
   const loc=currentLocation(p),old=nodes.get(p.id);
   if(!loc||!show||cityMode){if(old)old.hidden=true;continue}
@@ -75,12 +104,33 @@ function renderPositions(){
    }
    continue;
   }
-  const q=project(loc.lon,loc.lat),point=world.createSVGPoint();point.x=q.x;point.y=q.y;
+  mainEntries.push({person:p,location:loc});
+ }
+ const visiblePlaces=groupMapLocations(mainEntries).flatMap(group=>{
+  const q=project(group.lon,group.lat),point=world.createSVGPoint();point.x=q.x;point.y=q.y;
   const screen=point.matrixTransform(matrix),x=screen.x-bounds.left,y=screen.y-bounds.top;
-  const b=marker(p,loc);b.hidden=x<0||x>bounds.width||y<10||y>bounds.height;
-  if(b.hidden)continue;
-  let offset=0;while(occupied.some(a=>Math.abs(a.x-(x+offset))<39&&Math.abs(a.y-y)<58))offset+=35;
-  occupied.push({x:x+offset,y});b.dataset.dragging=String(stage.classList.contains('dragging')||!animateMove);b.style.left=`${x+offset}px`;b.style.top=`${y}px`;
+  return x<0||x>bounds.width||y<10||y>bounds.height?[]:[{...group,x,y}];
+ });
+ for(const group of clusterMapGroups(visiblePlaces)){
+  mapGroups.set(group.key,group);
+  const plan=planPeopleGroup(group,selected),hasSelection=group.members.some(e=>e.person.id===selected)&&!panel.hidden;
+  for(const visual of plan.markers){
+   const {person:p,location:loc}=visual;
+   const b=marker(p,loc,false,{...visual,mode:plan.mode,muted:hasSelection&&selected!==p.id});b.hidden=false;
+   b.dataset.groupKey=group.key;b.dataset.groupCount=String(group.members.length);
+   b.dataset.anchorX=String(visual.anchorX);b.dataset.anchorY=String(visual.anchorY);
+   if(plan.mode==='stack'){
+    b.setAttribute('aria-label',`${year}年，${loc.label}，${group.nearby?'附近':'此地'}人物群，点击展开全部人物`);
+    b.title=group.members.map(e=>e.person.name).join('、')+' · 点击展开人物';
+   }
+   b.dataset.dragging=String(stage.classList.contains('dragging')||!animateMove);b.style.left=`${visual.x}px`;b.style.top=`${visual.y}px`;
+   if(Math.hypot(visual.x-visual.anchorX,visual.y-visual.anchorY)>1){
+    const line=document.createElementNS('http://www.w3.org/2000/svg','line');
+    for(const [key,value] of Object.entries({x1:visual.anchorX,y1:visual.anchorY,x2:visual.x,y2:visual.y}))line.setAttribute(key,String(value));
+    line.classList.toggle('is-picked',selected===p.id);leaders.append(line);
+   }
+  }
+  for(const place of group.places){const pin=document.createElement('span');pin.className='poet-place-pin';pin.style.left=`${place.x}px`;pin.style.top=`${place.y}px`;extraDots.append(pin)}
  }
  west.hidden=!show||cityMode||!western||westDismissed;
  renderCityNote(cityMode);
@@ -123,7 +173,9 @@ function renderRoster(){
  const list=roster.querySelector('.people-list');if(!list)return;
  roster.dataset.year=year;
  roster.querySelector('[data-roster-year]').textContent=`${year} 年`;
- list.innerHTML=people.map(p=>{
+ const visible=people.filter(p=>(!search||p.name.includes(search)||String(p.dynasty||'').includes(search))&&(!activeOnly||currentLocations(p).length));
+ roster.querySelector('[data-roster-count]').textContent=`${visible.length} / ${people.length} 人`;
+ list.innerHTML=visible.map(p=>{
   const life=lifeStatus(p,year),locs=currentLocations(p);
   return `<button class="people-row" data-person="${p.id}" data-life="${life.key}" aria-pressed="${selected===p.id&&!panel.hidden}" aria-label="${esc(p.name)}，${esc(life.status)}，${esc(life.ageLabel)}，${locs.length?`本年${locs.length}处记录`:'本年无可定位记录'}"><span class="people-row-portrait">${sprite(p,.65)}</span><span class="people-row-copy"><strong style="color:${p.color}">${esc(p.name)}</strong><span class="people-life">${esc(life.status)} · ${esc(life.ageLabel)}</span><small>${locs.length?`本年 ${locs.length} 处行迹`:(life.key==='unborn'?'尚未出生':life.key==='dead'?'生平已结束':'本年位置不详')}</small></span></button>`;
  }).join('');
@@ -131,8 +183,10 @@ function renderRoster(){
  roster.querySelector('[data-roster-note]').textContent=people.some(p=>currentLocations(p).length)?'点人物查看行迹与作品':'本年暂无可定位的人物记录';
 }
 function buildControls(){
- roster.innerHTML=`<div class="people-roster-heading"><h2>人 物</h2><span data-roster-year></span><label><input data-show type="checkbox" checked aria-label="显示地图人物">显示</label></div><div class="people-list"></div><p class="people-caption" data-roster-note></p><p class="people-roster-footnote">年龄依所采用生年估算；位置不详不绘制。</p>`;
+ roster.innerHTML=`<div class="people-roster-tools"><div class="people-roster-heading"><h2>人 物</h2><span data-roster-year></span><label><input data-show type="checkbox" checked aria-label="显示地图人物">显示</label></div><input class="people-search" type="search" aria-label="搜索人物或朝代" placeholder="搜索人物 / 朝代"><div class="people-roster-filter"><label><input data-active-only type="checkbox">仅本年有行迹</label><span data-roster-count></span></div></div><div class="people-list"></div><p class="people-caption" data-roster-note></p><p class="people-roster-footnote">年龄依生年估算；细线连接人物实际地点。</p>`;
  roster.querySelector('[data-show]').onchange=e=>{show=e.target.checked;renderPositions()};
+ roster.querySelector('.people-search').oninput=e=>{search=e.target.value.trim();renderRoster()};
+ roster.querySelector('[data-active-only]').onchange=e=>{activeOnly=e.target.checked;renderRoster()};
 }
 function closePanel(){panel.hidden=true;selected=null;document.body.classList.remove('people-panel-open');renderRoster();renderPositions()}
 function monthLabel(raw){return /^\d+(;\d+)*$/.test(raw)?raw+'月':raw}
@@ -141,9 +195,14 @@ function renderPanel(){
  const p=people.find(p=>p.id===selected);if(!p)return;
  const locs=currentLocations(p),loc=currentLocation(p),life=lifeStatus(p,year);
  panel.innerHTML=`<button class="people-panel-close" aria-label="关闭人物详情">×</button><div class="people-profile">${sprite(p,1.25)}<div><h2 style="color:${p.color}">${esc(p.name)}</h2><p>${year}年 · ${esc(life.status)} · ${esc(life.ageLabel)}</p><p>${p.record_from}—${p.record_to}年生平行迹</p></div></div><div class="people-panel-content"></div>`;
+ const availableYears=Object.keys(yearIndex).filter(y=>yearIndex[y][p.id]?.length).map(Number).sort((a,b)=>a-b);
+ const jump=document.createElement('select');jump.className='people-year-jump';jump.setAttribute('aria-label',`查看${p.name}其他年份行迹`);
+ jump.innerHTML='<option value="">查看有行迹的年份…</option>'+availableYears.map(y=>`<option value="${y}" ${y===year?'selected':''}>${y} 年</option>`).join('');
+ jump.onchange=()=>{if(!jump.value)return;stop();const control=document.getElementById('year-slider');control.value=jump.value;control.dispatchEvent(new Event('input',{bubbles:true}))};
+ panel.querySelector('.people-profile').after(jump);
  panel.querySelector('button').onclick=closePanel;
  const content=panel.querySelector('.people-panel-content');
- if(!loc){content.innerHTML='<p>本年没有年代与位置均明确的行迹记录，地图不显示此人。</p>'+`<p class="people-source">${esc(p.life_note)}</p>`;renderResearch(p,content);return}
+ if(!loc){content.innerHTML='<p>本年没有年代与位置均明确的行迹记录，地图不显示此人。</p>'+`<p class="people-source">${esc(p.life_note)}</p><p class="people-source">${esc(p.portrait_note)}</p>`;renderResearch(p,content);return}
  content.innerHTML=`<label for="people-place">${locs.length>1?`本年${locs.length}处记录地点`:'本年记录地点'}</label><select id="people-place" aria-label="选择人物本年地点">${locs.map(l=>`<option value="${esc(l.id)}" ${l.id===loc.id?'selected':''}>${esc(l.label)}</option>`).join('')}</select>${locs.length>1?'<p class="people-source">当前显示本年记录之一；列表顺序不代表真实行程先后。</p>':''}<label for="people-event">此地 ${loc.events.length} 条记载</label><select id="people-event" aria-label="选择行迹记载">${loc.events.map((e,i)=>`<option value="${e.id}">${i+1}. ${esc((e.time.month_raw?monthLabel(e.time.month_raw)+' · ':'')+(e.description||'作品记载').slice(0,35))}</option>`).join('')}</select><div data-event-content></div><section data-location-works aria-label="本年此地作品"></section>`;
  content.querySelector('#people-place').onchange=e=>{stop();focused.set(p.id,e.target.value);westDismissed=false;animateMove=true;renderPositions();renderPanel()};
  content.querySelector('#people-event').onchange=e=>{renderEvent(p,loc.events.find(x=>x.id===e.target.value));if(workScope==='event')renderLocationWorks(p,loc)};
@@ -223,6 +282,8 @@ try{
  document.addEventListener('visibilitychange',()=>{if(document.hidden)stop()});
  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!panel.hidden)closePanel()});
  window.addEventListener('pagehide',stop);
+ document.addEventListener('pointerdown',e=>{if(!groupMenu.contains(e.target)&&!e.target.closest('.poet-marker'))closeGroupMenu()});
+ document.addEventListener('keydown',e=>{if(e.key==='Escape')closeGroupMenu()});
 }catch(error){
  roster.innerHTML=`<span class="people-failure">人物资料暂未加载，地图功能仍可使用。${location.protocol==='file:'?'请通过本地HTTP预览打开页面。':''}</span>`;
  console.error('People overlay:',error);

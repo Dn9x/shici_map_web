@@ -70,7 +70,7 @@ body.region-detail #world-map [fill="url(#paper-fibres)"]{display:none}
 @media(max-width:760px){:root{--timeline-height:199px}.period-scale{margin:0 31px 7px;height:23px}.period-scale button{font-size:9px;height:21px;padding:0}.year-milestones{flex-wrap:nowrap;justify-content:flex-start;padding-bottom:5px}.year-milestones button{font-size:9px}.jump-caption{font-size:9px}#era-jump{bottom:7px}.year-milestones{margin-bottom:27px}#chronology-note{font-size:10px;padding:5px 7px}.period-scale button.active{color:#fff7e4}}
 
 </style>
-<link rel="stylesheet" href="people.css?v=559b2b2851e4dd46">
+<link rel="stylesheet" href="people.css?v=80e2212c3950c3db">
 <header><div class="brand"><strong>唐宋山河圖</strong><span id="current-period" aria-label="当前时代">唐</span><button id="back" class="crumb" hidden aria-label="返回地图">← 返回地图</button><span id="city-heading"></span></div><span class="instructions" id="instructions">618—1279 年 · 拖动年代，观看山河流转</span></header>
 <main id="stage" aria-label="从山河到城池的分层矢量地图"><svg xmlns="http://www.w3.org/2000/svg" width="3200" height="2200" viewBox="0 0 3200 2200" role="img" aria-labelledby="map-title map-desc" data-year="630" data-projection="x=170+(lon-93)*78;y=175+(46-lat)*66">
 <title id="map-title">唐初山河图 · 公元630年 · 矢量风格评审样图</title>
@@ -7779,5 +7779,5 @@ const requestedYear=new URL(location.href).searchParams.get('year');
 setYear(requestedYear!==null&&requestedYear.trim()!==''&&Number.isFinite(Number(requestedYear))?Number(requestedYear):START,{first:true});
 
 </script>
-<script type="module" src="people-overlay.mjs?v=559b2b2851e4dd46"></script>
+<script type="module" src="people-overlay.mjs?v=80e2212c3950c3db"></script>
 </html>

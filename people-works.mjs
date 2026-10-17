@@ -1,5 +1,5 @@
 /** Select only work identities attached to the exact current person/year/location. */
-import {validEvent} from './people-data.mjs?v=559b2b2851e4dd46';
+import {validEvent} from './people-data.mjs?v=80e2212c3950c3db';
 
 export function selectLocationWorks(data,{personId,year,location,eventId=null}){
  const result={matched:[],pending:[],eventIds:[]};
