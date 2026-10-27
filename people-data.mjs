@@ -4,6 +4,14 @@ export function ageStage(person,year){
  return {age,stage:age===null?'middle':age<15?'child':age<30?'young':age<50?'middle':'late',
          label:age===null?'年龄待考':`约${age}岁${person.birth_uncertain?' · 生年待考':''}`};
 }
+/** Costume periods only affect artwork, never events, age or life status. */
+export function portraitForYear(person,year){
+ const {stage}=ageStage(person,year);
+ const period=(person.portrait_periods||[]).find(p=>year>=p.from&&year<=p.to);
+ const frames=period?.frames||person.frames;
+ return {stage,type:stage==='child'?'child':period?.type||person.portrait_type,
+  label:stage==='child'?'孩童':period?.label||person.portrait_label,frame:frames[stage]};
+}
 /** Life status is distinct from whether this year has a mappable record. */
 export function lifeStatus(person,year){
  const age=ageStage(person,year).label;

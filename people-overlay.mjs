@@ -1,6 +1,6 @@
-import {ageStage,yearLocations,resolveSelection,groupMapLocations,clusterMapGroups,planPeopleGroup,project,inBaseMap,westernPoint,canLocateInWest,lifeStatus} from './people-data.mjs?v=dc09b41dfe159b9a';
-import {selectLocationWorks} from './people-works.mjs?v=dc09b41dfe159b9a';
-import {biographyResearchHTML,workResearchHTML} from './people-research.mjs?v=dc09b41dfe159b9a';
+import {portraitForYear,ageStage,yearLocations,resolveSelection,groupMapLocations,clusterMapGroups,planPeopleGroup,project,inBaseMap,westernPoint,canLocateInWest,lifeStatus} from './people-data.mjs?v=49a29e3c1836451d';
+import {selectLocationWorks} from './people-works.mjs?v=49a29e3c1836451d';
+import {biographyResearchHTML,workResearchHTML} from './people-research.mjs?v=49a29e3c1836451d';
 
 const stage=document.getElementById('stage'),world=document.getElementById('world-map');
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -44,9 +44,10 @@ function currentLocations(p){
 }
 function currentLocation(p){return resolveSelection(currentLocations(p),focused.get(p.id))}
 function sprite(p,scale=1){
- const {stage:s}=ageStage(p,year),f=p.frames[s];
- // Viewport clipping is applied at display time. Original PNG pixels stay intact.
- return `<svg class="poet-figure" width="${f.display_width*scale}" height="${f.display_height*scale}" viewBox="${f.x} ${f.y} ${f.width} ${f.height}" aria-hidden="true"><image href="${esc(p.sheet_url)}" x="0" y="0" width="1536" height="1024"/></svg>`;
+ const portrait=portraitForYear(p,year),f=portrait.frame;
+ const address=new URL(f.url||p.sheet_url,document.baseURI);
+ if(dataVersion)address.searchParams.set('v',dataVersion);
+ return `<svg class="poet-figure" data-portrait-type="${esc(portrait.type)}" data-age-stage="${portrait.stage}" width="${f.display_width*scale}" height="${f.display_height*scale}" viewBox="${f.x} ${f.y} ${f.width} ${f.height}" aria-hidden="true"><image href="${esc(address.href)}" x="0" y="0" width="${f.width}" height="${f.height}"/></svg>`;
 }
 function marker(p,loc,inset=false,visual={}){
  let b=inset?null:nodes.get(p.id);
@@ -57,7 +58,7 @@ function marker(p,loc,inset=false,visual={}){
   if(!inset){nodes.set(p.id,b);layer.append(b)}
  }
  const age=ageStage(p,year),mode=visual.mode||'single',companions=visual.companions||[];
- const scale=inset?.65:Math.max(visual.scale||1,30/p.frames[age.stage].display_height);
+ const scale=inset?.65:Math.max(visual.scale||1,30/portraitForYear(p,year).frame.display_height);
  const caption=mode==='stack'?`${p.name} 等`:p.name;
  const signature=`${age.stage}:${year}:${loc.id}:${mode}:${scale}:${companions.map(c=>c.id).join(',')}`;
  if(b.dataset.signature!==signature){
